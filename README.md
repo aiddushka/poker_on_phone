@@ -1,4 +1,5 @@
 # PockerLAN - Mental Poker (Flutter)
+[скачать .apk](https://github.com/aiddushka/4.2.CRIPTO_poker_on_phone/releases/tag/v1.0.0)
 
 Кроссплатформенное LAN-приложение (Android/iOS) с многопользовательской покерной игрой (Texas Hold'em), локальной сетью, базовой криптографической подсистемой SRA и двуязычным интерфейсом (RU/EN).
 
