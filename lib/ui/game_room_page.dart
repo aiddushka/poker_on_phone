@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:pocker_in_phone/game/poker_hand.dart';
 import 'package:pocker_in_phone/game/playing_card.dart';
 import 'package:pocker_in_phone/network/lan_peer.dart';
@@ -67,12 +68,17 @@ class _GameRoomPageState extends State<GameRoomPage> {
   int _dealerSeatIndex = 0;
   int _turnSeatIndex = 0;
   int _streetIndex = 0;
+  bool _isBettingOpen = false;
   Set<String> _actedThisStreet = <String>{};
   String _status = 'Ожидание начала игры';
 
   @override
   void initState() {
     super.initState();
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
     widget.lan.messages.listen(_handleNetworkMessage);
     if (widget.isHost) {
       _players = widget.initialPlayerIds
@@ -86,6 +92,12 @@ class _GameRoomPageState extends State<GameRoomPage> {
           .toList();
       _startNewRoundAndBroadcast(firstRound: true);
     }
+  }
+
+  @override
+  void dispose() {
+    SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+    super.dispose();
   }
 
   void _handleNetworkMessage(LanMessage message) {
@@ -119,6 +131,7 @@ class _GameRoomPageState extends State<GameRoomPage> {
           _dealerSeatIndex = message.payload['dealerSeatIndex'] as int? ?? 0;
           _turnSeatIndex = message.payload['turnSeatIndex'] as int? ?? 0;
           _streetIndex = message.payload['streetIndex'] as int? ?? 0;
+          _isBettingOpen = message.payload['isBettingOpen'] as bool? ?? false;
           _actedThisStreet =
               ((message.payload['actedThisStreet'] as List<dynamic>?) ?? [])
                   .cast<String>()
@@ -175,15 +188,23 @@ class _GameRoomPageState extends State<GameRoomPage> {
     _pot = 0;
     _currentBet = 20;
     _streetIndex = 0;
+    _isBettingOpen = false;
     _actedThisStreet = <String>{};
     _turnSeatIndex = _nextActiveSeatAfter(_dealerSeatIndex);
-    _status = 'Префлоп. Ход: ${_playerNameBySeat(_turnSeatIndex)}';
+    _status = 'Раздача карт игрокам...';
     _holeCardIdsByPlayer = holeCards;
     _allCommunityCardIds = community;
-    _players = _players
-        .map((p) => p.copyWith(credits: widget.startingCredits, folded: false))
-        .toList();
+    _players = _players.map((p) => p.copyWith(folded: false)).toList();
+    if (firstRound) {
+      _players = _players
+          .map((p) => p.copyWith(credits: widget.startingCredits))
+          .toList();
+    }
     await _broadcastGameState(holeCards: holeCards, communityCards: community);
+    await Future<void>.delayed(const Duration(milliseconds: 1000));
+    _isBettingOpen = true;
+    _status = 'Префлоп. Ход: ${_playerNameBySeat(_turnSeatIndex)}';
+    await _broadcastGameState();
   }
 
   Future<void> _broadcastGameState({
@@ -207,6 +228,7 @@ class _GameRoomPageState extends State<GameRoomPage> {
       'dealerSeatIndex': _dealerSeatIndex,
       'turnSeatIndex': _turnSeatIndex,
       'streetIndex': _streetIndex,
+      'isBettingOpen': _isBettingOpen,
       'actedThisStreet': _actedThisStreet.toList(),
       'seatOrderIds': _seatOrderIds,
       'holeCards':
@@ -249,6 +271,7 @@ class _GameRoomPageState extends State<GameRoomPage> {
     if (playerSeat != _turnSeatIndex) {
       return;
     }
+    if (!_isBettingOpen) return;
     final player = _players[index];
     if (player.folded) return;
     switch (action) {
@@ -277,6 +300,15 @@ class _GameRoomPageState extends State<GameRoomPage> {
         _actedThisStreet = {player.id};
         _status = '${player.name} рейз +$raiseBy';
         break;
+      case 'raise_all':
+        final pay = player.credits;
+        if (pay <= 0) return;
+        _pot += pay;
+        _currentBet = max(_currentBet, pay);
+        _players[index] = player.copyWith(credits: 0);
+        _actedThisStreet = {player.id};
+        _status = '${player.name} ALL-IN ($pay)';
+        break;
     }
     _advanceTurnOrStreet();
     _broadcastGameState();
@@ -293,6 +325,7 @@ class _GameRoomPageState extends State<GameRoomPage> {
         _status = '${winner.name} выиграл банк $_pot (все сбросили)';
         _pot = 0;
       }
+      _scheduleNextRoundIfPossible();
       return;
     }
 
@@ -339,6 +372,23 @@ class _GameRoomPageState extends State<GameRoomPage> {
     _players[winIndex] = winner.copyWith(credits: winner.credits + _pot);
     _status = 'Шоудаун: ${winner.name} победил ($bestTitle), банк $_pot';
     _pot = 0;
+    _scheduleNextRoundIfPossible();
+  }
+
+  void _scheduleNextRoundIfPossible() {
+    final alive = _players.where((p) => p.credits > 0).toList();
+    if (alive.length < 2) {
+      _isBettingOpen = false;
+      _status = alive.isEmpty
+          ? 'Игра завершена'
+          : 'Игра завершена: ${alive.first.name} победил по кредитам';
+      _broadcastGameState();
+      return;
+    }
+    Future<void>.delayed(const Duration(seconds: 2), () {
+      if (!mounted || !widget.isHost) return;
+      _startNewRoundAndBroadcast();
+    });
   }
 
   int _nextActiveSeatAfter(int seatIndex) {
@@ -357,7 +407,7 @@ class _GameRoomPageState extends State<GameRoomPage> {
 
   List<String> _activePlayerIds() {
     return _players
-        .where((p) => !p.folded && p.credits >= 0)
+        .where((p) => !p.folded && p.credits > 0)
         .map((p) => p.id)
         .toList();
   }
@@ -447,6 +497,34 @@ class _GameRoomPageState extends State<GameRoomPage> {
             player.folded ? 'Сбросил' : (isMe ? 'Вы' : 'В игре'),
             style: TextStyle(fontSize: (nameSize - 2).clamp(10, 14)),
           ),
+          const SizedBox(height: 3),
+          Wrap(
+            spacing: 3,
+            children:
+                (isMe
+                        ? (_holeCardIdsByPlayer[player.id] ?? const <int>[])
+                              .map(_cardFromId)
+                              .map((c) => c.shortLabel)
+                              .toList()
+                        : const ['🂠', '🂠'])
+                    .map(
+                      (label) => Container(
+                        width: 24,
+                        height: 34,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1B3A2E),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.white24),
+                        ),
+                        child: Text(
+                          label,
+                          style: const TextStyle(fontSize: 10),
+                        ),
+                      ),
+                    )
+                    .toList(),
+          ),
           if (isDealer)
             const Text('Дилер', style: TextStyle(color: Colors.orange)),
         ],
@@ -457,172 +535,192 @@ class _GameRoomPageState extends State<GameRoomPage> {
   @override
   Widget build(BuildContext context) {
     final screen = MediaQuery.of(context).size;
-    final tableRadius = min(screen.height * 0.28, screen.width * 0.22);
+    final tableRadiusX = min(screen.height * 0.45, screen.width * 0.30);
+    final tableRadiusY = min(screen.height * 0.28, screen.width * 0.18);
     final centerX = screen.width * 0.36;
     final centerY = screen.height * 0.46;
     final canAct =
         _seatOrderIds.isNotEmpty &&
         _seatOrderIds[_turnSeatIndex] == widget.meId &&
-        _streetIndex < 4;
+        _streetIndex < 4 &&
+        _isBettingOpen;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Игровой стол')),
-      body: Row(
-        children: [
-          Expanded(
-            child: Stack(
-              children: [
-                Positioned.fill(
-                  child: Center(
-                    child: Container(
-                      width: tableRadius * 2.2,
-                      height: tableRadius * 2.2,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF0F5C3A),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white24, width: 3),
+      body: SafeArea(
+        child: Row(
+          children: [
+            Expanded(
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: Center(
+                      child: Container(
+                        width: tableRadiusX * 2.05,
+                        height: tableRadiusY * 2.15,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0F5C3A),
+                          borderRadius: BorderRadius.circular(220),
+                          border: Border.all(color: Colors.white24, width: 3),
+                        ),
                       ),
                     ),
                   ),
-                ),
-                Positioned(
-                  left: centerX - 40,
-                  top: centerY - tableRadius - 48,
-                  child: const Chip(
-                    avatar: Icon(Icons.casino, size: 18),
-                    label: Text('Дилер'),
-                  ),
-                ),
-                ..._seatOrderIds.asMap().entries.map((entry) {
-                  final i = entry.key;
-                  final playerId = entry.value;
-                  final player = _players.firstWhere((p) => p.id == playerId);
-                  final angle = (-pi / 2) + (2 * pi * i / _seatOrderIds.length);
-                  final x = centerX + tableRadius * cos(angle) - 70;
-                  final y = centerY + tableRadius * sin(angle) - 40;
-                  return Positioned(
-                    left: x,
-                    top: y,
-                    child: _tablePlayer(
-                      player: player,
-                      isDealer: i == _dealerSeatIndex,
-                      isTurn: i == _turnSeatIndex,
-                      isMe: player.id == widget.meId,
-                    ),
-                  );
-                }),
-                Positioned(
-                  left: centerX - 95,
-                  top: centerY - 45,
-                  child: Column(
-                    children: [
-                      Text(
-                        'Банк: $_pot',
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                      Text('Этап: ${_streetLabel(_streetIndex)}'),
-                      Text(_status),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 6,
-                        children: _communityCards.map(_cardChip).toList(),
-                      ),
-                    ],
-                  ),
-                ),
-                Positioned(
-                  left: 24,
-                  bottom: 24,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Ваши карты',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 8,
-                        children: _myCards.map(_cardChip).toList(),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            width: 250,
-            padding: const EdgeInsets.fromLTRB(12, 14, 12, 16),
-            decoration: const BoxDecoration(
-              color: Color(0x22000000),
-              border: Border(left: BorderSide(color: Colors.white24)),
-            ),
-            child: Column(
-              children: [
-                Text(
-                  'Текущая ставка: $_currentBet',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 10),
-                Expanded(
-                  child: Center(
-                    child: RotatedBox(
-                      quarterTurns: 3,
-                      child: Slider(
-                        min: 10,
-                        max: 300,
-                        divisions: 29,
-                        value: _raiseValue.toDouble(),
-                        label: '$_raiseValue',
-                        onChanged: canAct
-                            ? (v) => setState(() => _raiseValue = v.toInt())
-                            : null,
-                      ),
+                  Positioned(
+                    left: 8,
+                    top: 4,
+                    child: IconButton(
+                      onPressed: () => Navigator.of(context).maybePop(),
+                      icon: const Icon(Icons.arrow_back),
                     ),
                   ),
-                ),
-                Text('Рейз: $_raiseValue'),
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton(
-                    onPressed: canAct ? () => _sendAction('fold') : null,
-                    child: const Text('Сбросить'),
+                  Positioned(
+                    left: centerX - 42,
+                    top: centerY - tableRadiusY - 86,
+                    child: const Chip(
+                      avatar: Icon(Icons.casino, size: 18),
+                      label: Text('Дилер'),
+                    ),
                   ),
-                ),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton(
-                    onPressed: canAct ? () => _sendAction('check') : null,
-                    child: const Text('Чек'),
+                  ..._seatOrderIds.asMap().entries.map((entry) {
+                    final i = entry.key;
+                    final playerId = entry.value;
+                    final player = _players.firstWhere((p) => p.id == playerId);
+                    final angle =
+                        (-pi / 2) + (2 * pi * i / _seatOrderIds.length);
+                    final x = centerX + tableRadiusX * cos(angle) - 72;
+                    final y = centerY + tableRadiusY * sin(angle) - 48;
+                    return Positioned(
+                      left: x,
+                      top: y,
+                      child: _tablePlayer(
+                        player: player,
+                        isDealer: i == _dealerSeatIndex,
+                        isTurn: i == _turnSeatIndex,
+                        isMe: player.id == widget.meId,
+                      ),
+                    );
+                  }),
+                  Positioned(
+                    left: centerX - 90,
+                    top: centerY - 24,
+                    child: Column(
+                      children: [
+                        Text('Этап: ${_streetLabel(_streetIndex)}'),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 6,
+                          children: _communityCards.map(_cardChip).toList(),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: canAct ? () => _sendAction('call') : null,
-                    child: const Text('Колл'),
+                  Positioned(
+                    left: 24,
+                    bottom: 24,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Ваши карты',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 8,
+                          children: _myCards.map(_cardChip).toList(),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: canAct ? () => _sendAction('raise') : null,
-                    child: const Text('Повысить'),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  canAct
-                      ? 'Ваш ход'
-                      : 'Ожидание хода ${_seatOrderIds.isEmpty ? '' : _playerNameBySeat(_turnSeatIndex)}',
-                  textAlign: TextAlign.center,
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+            Container(
+              width: 250,
+              padding: const EdgeInsets.fromLTRB(12, 14, 12, 16),
+              decoration: const BoxDecoration(
+                color: Color(0x22000000),
+                border: Border(left: BorderSide(color: Colors.white24)),
+              ),
+              child: Column(
+                children: [
+                  Text(
+                    'Банк: $_pot',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  Text(
+                    'Текущая ставка: $_currentBet',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(_status, textAlign: TextAlign.center),
+                  const SizedBox(height: 10),
+                  Expanded(
+                    child: Center(
+                      child: RotatedBox(
+                        quarterTurns: 3,
+                        child: Slider(
+                          min: 10,
+                          max: 300,
+                          divisions: 29,
+                          value: _raiseValue.toDouble(),
+                          label: '$_raiseValue',
+                          onChanged: canAct
+                              ? (v) => setState(() => _raiseValue = v.toInt())
+                              : null,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Text('Рейз: $_raiseValue'),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: canAct ? () => _sendAction('fold') : null,
+                      child: const Text('Сбросить'),
+                    ),
+                  ),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: canAct ? () => _sendAction('check') : null,
+                      child: const Text('Чек'),
+                    ),
+                  ),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: canAct ? () => _sendAction('call') : null,
+                      child: const Text('Колл'),
+                    ),
+                  ),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: canAct ? () => _sendAction('raise') : null,
+                      child: const Text('Повысить'),
+                    ),
+                  ),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: canAct ? () => _sendAction('raise_all') : null,
+                      child: const Text('Raise All-in'),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    canAct
+                        ? 'Ваш ход'
+                        : 'Ожидание хода ${_seatOrderIds.isEmpty ? '' : _playerNameBySeat(_turnSeatIndex)}',
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
