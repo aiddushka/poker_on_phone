@@ -50,6 +50,50 @@ const Map<String, String> _ru = {
   'raise_validation':
       'Для повышения введите сумму больше текущей ставки и не выше доступного лимита',
   'credits': 'Кредиты',
+  'help_intro_title': 'Как играть (для новичков)',
+  'help_intro_body':
+      'Техасский Холдем: каждому игроку выдается 2 закрытые карты, затем на стол выходят 5 общих карт. Ваша цель — собрать лучшую комбинацию из любых 5 карт (2 ваши + общие).',
+  'help_rounds_title': 'Этапы раздачи',
+  'help_rounds_body':
+      'Префлоп (2 карты на руках), Флоп (3 общие карты), Терн (4-я общая), Ривер (5-я общая), Шоудаун (сравнение комбинаций).',
+  'help_actions_title': 'Действия игрока',
+  'help_actions_body':
+      'Сбросить — выйти из раздачи. Просмотреть (Check) — пропустить ход без ставки, если ставка уже уравнена. Принять — уравнять текущую ставку. Повысить — поставить больше текущей ставки.',
+  'help_win_title': 'Когда вы выигрываете',
+  'help_win_body':
+      'Вы выигрываете, если все соперники сбросили карты или если на Шоудауне у вас самая сильная комбинация. При равных комбинациях банк делится.',
+  'combo_royal_flush': 'Флеш-Рояль',
+  'combo_straight_flush': 'Стрит-Флеш',
+  'combo_four_kind': 'Каре',
+  'combo_full_house': 'Фулл-Хаус',
+  'combo_flush': 'Флеш',
+  'combo_straight': 'Стрит',
+  'combo_three_kind': 'Сет / Тройка',
+  'combo_two_pair': 'Две пары',
+  'combo_pair': 'Пара',
+  'combo_high_card': 'Старшая карта',
+  'status_waiting_start': 'Ожидание начала игры',
+  'status_dealing': 'Раздача карт всем игрокам...',
+  'status_preflop_turn': 'Префлоп. Ход: {name}',
+  'status_stage_turn': '{stage}. Ход: {name}',
+  'status_allin_showdown': 'Все игроки в all-in. Переход к вскрытию',
+  'status_winner_with_combo': 'Победитель: {name} ({combo}), банк {pot}',
+  'status_winner_no_showdown': 'без вскрытия',
+  'status_round_finished': 'Раунд завершен',
+  'status_game_finished_winner': 'Игра завершена. Победитель: {name}',
+  'status_prepare_new_game': 'Подготовка новой игры...',
+  'status_min_two_players': 'Для новой игры нужно минимум 2 игрока',
+  'street_preflop': 'Префлоп',
+  'street_flop': 'Флоп',
+  'street_turn': 'Терн',
+  'street_river': 'Ривер',
+  'street_showdown': 'Шоудаун',
+  'player_not_in_game': 'Не в игре',
+  'player_you': 'Вы',
+  'player_in_game': 'В игре',
+  'bet_input_label': 'Ставка (20..ваши кредиты)',
+  'close_tooltip': 'Закрыть',
+  'new_game_window': 'Окно новой игры',
 };
 
 const Map<String, String> _en = {
@@ -101,10 +145,62 @@ const Map<String, String> _en = {
   'raise_validation':
       'Enter a value higher than current bet and within your available limit',
   'credits': 'Credits',
+  'help_intro_title': 'How To Play (Beginner)',
+  'help_intro_body':
+      'In Texas Holdem each player gets 2 private cards, then 5 community cards are dealt. Your goal is to build the best 5-card hand using any 5 from 7 cards (your 2 + community).',
+  'help_rounds_title': 'Round Stages',
+  'help_rounds_body':
+      'Preflop (2 hole cards), Flop (3 community cards), Turn (4th card), River (5th card), Showdown (compare hands).',
+  'help_actions_title': 'Player Actions',
+  'help_actions_body':
+      'Fold — leave the hand. Check — pass without betting if the current bet is already matched. Accept — match the current bet. Raise — increase the current bet.',
+  'help_win_title': 'How You Win',
+  'help_win_body':
+      'You win if all opponents fold, or if your hand is strongest at showdown. If hands are equal, the pot is split.',
+  'combo_royal_flush': 'Royal Flush',
+  'combo_straight_flush': 'Straight Flush',
+  'combo_four_kind': 'Four of a Kind',
+  'combo_full_house': 'Full House',
+  'combo_flush': 'Flush',
+  'combo_straight': 'Straight',
+  'combo_three_kind': 'Three of a Kind',
+  'combo_two_pair': 'Two Pair',
+  'combo_pair': 'One Pair',
+  'combo_high_card': 'High Card',
+  'status_waiting_start': 'Waiting for game start',
+  'status_dealing': 'Dealing cards to all players...',
+  'status_preflop_turn': 'Preflop. Turn: {name}',
+  'status_stage_turn': '{stage}. Turn: {name}',
+  'status_allin_showdown': 'All players are all-in. Moving to showdown',
+  'status_winner_with_combo': 'Winner: {name} ({combo}), pot {pot}',
+  'status_winner_no_showdown': 'without showdown',
+  'status_round_finished': 'Round finished',
+  'status_game_finished_winner': 'Game finished. Winner: {name}',
+  'status_prepare_new_game': 'Preparing a new game...',
+  'status_min_two_players': 'At least 2 players are required for a new game',
+  'street_preflop': 'Preflop',
+  'street_flop': 'Flop',
+  'street_turn': 'Turn',
+  'street_river': 'River',
+  'street_showdown': 'Showdown',
+  'player_not_in_game': 'Not in game',
+  'player_you': 'You',
+  'player_in_game': 'In game',
+  'bet_input_label': 'Bet (20..your credits)',
+  'close_tooltip': 'Close',
+  'new_game_window': 'New game window',
 };
 
 String tr(BuildContext context, String key) {
   final settings = AppSettingsScope.of(context);
   final dict = settings.language == AppLanguage.en ? _en : _ru;
+  return dict[key] ?? key;
+}
+
+String trRead(BuildContext context, String key) {
+  final settings = AppSettingsScope.read(context);
+  final dict = (settings?.language ?? AppLanguage.ru) == AppLanguage.en
+      ? _en
+      : _ru;
   return dict[key] ?? key;
 }

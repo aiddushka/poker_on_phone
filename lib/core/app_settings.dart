@@ -44,4 +44,14 @@ class AppSettingsScope extends InheritedNotifier<AppSettings> {
     }
     return scope.notifier!;
   }
+
+  static AppSettings? read(BuildContext context) {
+    final element = context
+        .getElementForInheritedWidgetOfExactType<AppSettingsScope>();
+    final widget = element?.widget;
+    if (widget is AppSettingsScope) {
+      return widget.notifier;
+    }
+    return null;
+  }
 }

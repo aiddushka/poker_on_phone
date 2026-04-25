@@ -21,4 +21,3 @@ void main() {
     expect(find.text('Подключиться'), findsOneWidget);
   });
 }
-A@iduskakrutp@ssw0rd

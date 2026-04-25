@@ -76,13 +76,23 @@ class _GameRoomPageState extends State<GameRoomPage> {
   bool _showTournamentLobby = false;
   bool _canOpenNewGameOverlay = false;
   int _configuredStartingCredits = 1000;
+  String? _winnerName;
+  String? _winnerCombo;
+  int? _winnerPot;
   Set<String> _actedThisStreet = <String>{};
-  String _status = 'Ожидание начала игры';
+  String _status = 'status_waiting_start';
   String? _winnerBanner;
+
+  String _t(String key, [Map<String, String> vars = const {}]) {
+    var value = trRead(context, key);
+    vars.forEach((k, v) => value = value.replaceAll('{$k}', v));
+    return value;
+  }
 
   @override
   void initState() {
     super.initState();
+    _status = _t('status_waiting_start');
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
@@ -150,6 +160,9 @@ class _GameRoomPageState extends State<GameRoomPage> {
           _currentBet = message.payload['currentBet'] as int;
           _status = message.payload['status'] as String;
           _winnerBanner = message.payload['winnerBanner'] as String?;
+          _winnerName = message.payload['winnerName'] as String?;
+          _winnerCombo = message.payload['winnerCombo'] as String?;
+          _winnerPot = message.payload['winnerPot'] as int?;
           _dealerSeatIndex = message.payload['dealerSeatIndex'] as int? ?? 0;
           _turnSeatIndex = message.payload['turnSeatIndex'] as int? ?? 0;
           _streetIndex = message.payload['streetIndex'] as int? ?? 0;
@@ -168,6 +181,15 @@ class _GameRoomPageState extends State<GameRoomPage> {
             for (final entry in committedRaw.entries)
               entry.key: entry.value as int,
           };
+          if (_winnerName != null &&
+              _winnerCombo != null &&
+              _winnerPot != null) {
+            _winnerBanner = _t('status_winner_with_combo', {
+              'name': _winnerName!,
+              'combo': _winnerCombo!,
+              'pot': _winnerPot.toString(),
+            });
+          }
           _betController.text = _currentBet.toString();
         });
         break;
@@ -234,6 +256,9 @@ class _GameRoomPageState extends State<GameRoomPage> {
     _canOpenNewGameOverlay = false;
     _actedThisStreet = {};
     _winnerBanner = null;
+    _winnerName = null;
+    _winnerCombo = null;
+    _winnerPot = null;
     _streetCommittedByPlayer = {for (final p in _players) p.id: 0};
     _players = _players.map((p) => p.copyWith(folded: p.credits <= 0)).toList();
     if (firstRound) {
@@ -245,11 +270,13 @@ class _GameRoomPageState extends State<GameRoomPage> {
           .toList();
     }
     _turnSeatIndex = _firstActingSeatIndex();
-    _status = 'Раздача карт всем игрокам...';
+    _status = _t('status_dealing');
     await _broadcastGameState();
     await Future<void>.delayed(const Duration(milliseconds: 900));
     _isBettingOpen = true;
-    _status = 'Префлоп. Ход: ${_playerNameBySeat(_turnSeatIndex)}';
+    _status = _t('status_preflop_turn', {
+      'name': _playerNameBySeat(_turnSeatIndex),
+    });
     await _broadcastGameState();
   }
 
@@ -280,6 +307,9 @@ class _GameRoomPageState extends State<GameRoomPage> {
       'streetCommittedByPlayer': _streetCommittedByPlayer,
       'showTournamentLobby': _showTournamentLobby,
       'canOpenNewGameOverlay': _canOpenNewGameOverlay,
+      'winnerName': _winnerName,
+      'winnerCombo': _winnerCombo,
+      'winnerPot': _winnerPot,
     };
     _handleNetworkMessage(LanMessage('game_state', payload));
     await widget.lan.send(LanMessage('game_state', payload));
@@ -382,27 +412,31 @@ class _GameRoomPageState extends State<GameRoomPage> {
       _turnSeatIndex = _firstActingSeatIndex();
       if (_shouldAutoRunToShowdown()) {
         _streetIndex = 4;
-        _status = 'Все игроки в all-in. Переход к вскрытию';
+        _status = _t('status_allin_showdown');
         _resolveShowdown();
         return;
       }
       if (_streetIndex >= 4) {
         _resolveShowdown();
       } else {
-        _status =
-            '${_streetLabel(_streetIndex)}. Ход: ${_playerNameBySeat(_turnSeatIndex)}';
+        _status = _t('status_stage_turn', {
+          'stage': _streetLabel(_streetIndex),
+          'name': _playerNameBySeat(_turnSeatIndex),
+        });
       }
       return;
     }
     _turnSeatIndex = _nextActiveSeatAfter(_turnSeatIndex);
     if (_shouldAutoRunToShowdown()) {
       _streetIndex = 4;
-      _status = 'Все игроки в all-in. Переход к вскрытию';
+      _status = _t('status_allin_showdown');
       _resolveShowdown();
       return;
     }
-    _status =
-        '${_streetLabel(_streetIndex)}. Ход: ${_playerNameBySeat(_turnSeatIndex)}';
+    _status = _t('status_stage_turn', {
+      'stage': _streetLabel(_streetIndex),
+      'name': _playerNameBySeat(_turnSeatIndex),
+    });
   }
 
   bool _isStreetComplete() {
@@ -423,7 +457,7 @@ class _GameRoomPageState extends State<GameRoomPage> {
     final active = _activeHandPlayerIds();
     var bestCategory = PokerHandCategory.highCard;
     String? winnerId;
-    String bestTitle = 'Старшая карта';
+    String bestTitle = tr(context, 'combo_high_card');
     for (final playerId in active) {
       final sevenIds = <int>[
         ...(_holeCardIdsByPlayer[playerId] ?? const []),
@@ -439,14 +473,28 @@ class _GameRoomPageState extends State<GameRoomPage> {
     }
     if (winnerId == null) return;
     final winner = _players.firstWhere((p) => p.id == winnerId);
-    _winnerBanner = 'Победитель: ${winner.name} ($bestTitle), банк $_pot';
+    _winnerBanner = _t('status_winner_with_combo', {
+      'name': winner.name,
+      'combo': bestTitle,
+      'pot': _pot.toString(),
+    });
+    _winnerName = winner.name;
+    _winnerCombo = bestTitle;
+    _winnerPot = _pot;
     _awardWinnerCredits(winnerId);
   }
 
   void _awardSingleWinner(String winnerId) {
     final winner = _players.firstWhere((p) => p.id == winnerId);
     final combo = _winnerComboOrNoShowdown(winnerId);
-    _winnerBanner = 'Победитель: ${winner.name} ($combo), банк $_pot';
+    _winnerBanner = _t('status_winner_with_combo', {
+      'name': winner.name,
+      'combo': combo,
+      'pot': _pot.toString(),
+    });
+    _winnerName = winner.name;
+    _winnerCombo = combo;
+    _winnerPot = _pot;
     _awardWinnerCredits(winnerId);
   }
 
@@ -457,7 +505,7 @@ class _GameRoomPageState extends State<GameRoomPage> {
     final hole = _holeCardIdsByPlayer[winnerId] ?? const <int>[];
     final all = [...hole, ...visibleCommunity];
     if (all.length < 5) {
-      return 'без вскрытия';
+      return tr(context, 'status_winner_no_showdown');
     }
     final cards = all.map(_cardFromId).toList();
     if (cards.length == 5) {
@@ -474,7 +522,7 @@ class _GameRoomPageState extends State<GameRoomPage> {
     }
     _pot = 0;
     _isBettingOpen = false;
-    _status = _winnerBanner ?? 'Раунд завершен';
+    _status = _winnerBanner ?? _t('status_round_finished');
     _scheduleNextRoundIfPossible();
   }
 
@@ -484,8 +532,9 @@ class _GameRoomPageState extends State<GameRoomPage> {
     _canOpenNewGameOverlay = true;
     _isBettingOpen = false;
     if (alive.length < 2) {
-      _status =
-          'Игра завершена. Победитель: ${alive.isEmpty ? '-' : alive.first.name}';
+      _status = _t('status_game_finished_winner', {
+        'name': alive.isEmpty ? '-' : alive.first.name,
+      });
       _winnerBanner = _status;
     } else {
       _status = tr(context, 'guest_waiting_hint');
@@ -558,27 +607,49 @@ class _GameRoomPageState extends State<GameRoomPage> {
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 10),
-                combo('Флеш-Рояль', '10♥ J♥ Q♥ K♥ A♥'),
-                combo('Стрит-Флеш', '5♣ 6♣ 7♣ 8♣ 9♣'),
-                combo('Каре', 'K♠ K♥ K♦ K♣ 2♣'),
-                combo('Фулл-Хаус', 'Q♠ Q♥ Q♦ 8♣ 8♦'),
-                combo('Флеш', '2♥ 5♥ 9♥ J♥ K♥'),
-                combo('Стрит', '4♣ 5♦ 6♠ 7♥ 8♣'),
-                combo('Сет / Тройка', '9♣ 9♦ 9♠ K♥ 2♦'),
-                combo('Две пары', 'A♣ A♦ 7♠ 7♥ 3♣'),
-                combo('Пара', 'J♣ J♦ 4♠ 8♥ K♣'),
-                combo('Старшая карта', 'A♣ 10♦ 8♠ 6♥ 3♣'),
+                combo(tr(context, 'combo_royal_flush'), '10♥ J♥ Q♥ K♥ A♥'),
+                combo(tr(context, 'combo_straight_flush'), '5♣ 6♣ 7♣ 8♣ 9♣'),
+                combo(tr(context, 'combo_four_kind'), 'K♠ K♥ K♦ K♣ 2♣'),
+                combo(tr(context, 'combo_full_house'), 'Q♠ Q♥ Q♦ 8♣ 8♦'),
+                combo(tr(context, 'combo_flush'), '2♥ 5♥ 9♥ J♥ K♥'),
+                combo(tr(context, 'combo_straight'), '4♣ 5♦ 6♠ 7♥ 8♣'),
+                combo(tr(context, 'combo_three_kind'), '9♣ 9♦ 9♠ K♥ 2♦'),
+                combo(tr(context, 'combo_two_pair'), 'A♣ A♦ 7♠ 7♥ 3♣'),
+                combo(tr(context, 'combo_pair'), 'J♣ J♦ 4♠ 8♥ K♣'),
+                combo(tr(context, 'combo_high_card'), 'A♣ 10♦ 8♠ 6♥ 3♣'),
                 const SizedBox(height: 12),
                 Text(
                   tr(context, 'game_description'),
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 6),
-                const Text(
-                  'Техасский Холдем: каждый игрок получает 2 закрытые карты, '
-                  'на стол выкладываются 5 общих. Цель — собрать лучшую комбинацию из 5 карт '
-                  'используя любые 5 из 7 доступных.',
+                Text(
+                  tr(context, 'help_intro_title'),
+                  style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
+                const SizedBox(height: 4),
+                Text(tr(context, 'help_intro_body')),
+                const SizedBox(height: 10),
+                Text(
+                  tr(context, 'help_rounds_title'),
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 4),
+                Text(tr(context, 'help_rounds_body')),
+                const SizedBox(height: 10),
+                Text(
+                  tr(context, 'help_actions_title'),
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 4),
+                Text(tr(context, 'help_actions_body')),
+                const SizedBox(height: 10),
+                Text(
+                  tr(context, 'help_win_title'),
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 4),
+                Text(tr(context, 'help_win_body')),
               ],
             ),
           ),
@@ -597,9 +668,9 @@ class _GameRoomPageState extends State<GameRoomPage> {
     final parsed = int.tryParse(_nextCreditsController.text.trim());
     if (parsed == null || parsed <= 0) return;
     if (_players.length < 2) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Для новой игры нужно минимум 2 игрока')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_t('status_min_two_players'))));
       return;
     }
     _configuredStartingCredits = parsed;
@@ -609,7 +680,10 @@ class _GameRoomPageState extends State<GameRoomPage> {
     _showTournamentLobby = false;
     _canOpenNewGameOverlay = false;
     _winnerBanner = null;
-    _status = 'Подготовка новой игры...';
+    _winnerName = null;
+    _winnerCombo = null;
+    _winnerPot = null;
+    _status = _t('status_prepare_new_game');
     _startNewRoundAndBroadcast(firstRound: true);
   }
 
@@ -667,15 +741,15 @@ class _GameRoomPageState extends State<GameRoomPage> {
   String _streetLabel(int street) {
     switch (street) {
       case 0:
-        return 'Префлоп';
+        return tr(context, 'street_preflop');
       case 1:
-        return 'Флоп';
+        return tr(context, 'street_flop');
       case 2:
-        return 'Терн';
+        return tr(context, 'street_turn');
       case 3:
-        return 'Ривер';
+        return tr(context, 'street_river');
       default:
-        return 'Шоудаун';
+        return tr(context, 'street_showdown');
     }
   }
 
@@ -713,7 +787,9 @@ class _GameRoomPageState extends State<GameRoomPage> {
     required int seatNo,
   }) {
     final isMe = p.id == widget.meId;
-    final status = p.folded ? 'Не в игре' : (isMe ? 'Вы' : 'В игре');
+    final status = p.folded
+        ? tr(context, 'player_not_in_game')
+        : (isMe ? tr(context, 'player_you') : tr(context, 'player_in_game'));
     return Container(
       width: 132,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
@@ -916,8 +992,8 @@ class _GameRoomPageState extends State<GameRoomPage> {
                                   TextField(
                                     controller: _betController,
                                     keyboardType: TextInputType.number,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Ставка (20..ваши кредиты)',
+                                    decoration: InputDecoration(
+                                      labelText: tr(context, 'bet_input_label'),
                                     ),
                                   ),
                                   const SizedBox(height: 8),
@@ -1050,13 +1126,13 @@ class _GameRoomPageState extends State<GameRoomPage> {
                                     child: IconButton(
                                       onPressed: _closeTournamentOverlay,
                                       icon: const Icon(Icons.close),
-                                      tooltip: 'Закрыть',
+                                      tooltip: tr(context, 'close_tooltip'),
                                     ),
                                   ),
                                   Text(
                                     _winnerBanner ??
                                         (widget.isHost
-                                            ? tr(context, 'waiting_new_game')
+                                            ? tr(context, 'new_game_window')
                                             : tr(context, 'waiting_new_game')),
                                     style: Theme.of(
                                       context,
@@ -1100,8 +1176,10 @@ class _GameRoomPageState extends State<GameRoomPage> {
                                                         icon: const Icon(
                                                           Icons.person_remove,
                                                         ),
-                                                        tooltip:
-                                                            'Удалить из следующей игры',
+                                                        tooltip: tr(
+                                                          context,
+                                                          'remove_next_game',
+                                                        ),
                                                         onPressed: () =>
                                                             _removePlayerFromNextGame(
                                                               p.id,
