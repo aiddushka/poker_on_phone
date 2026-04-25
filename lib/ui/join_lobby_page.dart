@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:pocker_in_phone/core/i18n.dart';
 import 'package:pocker_in_phone/network/lan_peer.dart';
 import 'package:pocker_in_phone/ui/game_room_page.dart';
 
@@ -19,6 +21,7 @@ class _JoinLobbyPageState extends State<JoinLobbyPage> {
   final _portController = TextEditingController(text: '5055');
   final _myId =
       'player-${DateTime.now().millisecondsSinceEpoch}-${Random().nextInt(9999)}';
+  Timer? _heartbeatTimer;
   String _status = 'Введите адрес хоста';
   bool _joined = false;
 
@@ -58,6 +61,10 @@ class _JoinLobbyPageState extends State<JoinLobbyPage> {
 
   @override
   void dispose() {
+    _heartbeatTimer?.cancel();
+    if (_joined) {
+      _lan.send(LanMessage('leave', {'playerId': _myId}));
+    }
     _nameController.dispose();
     _hostController.dispose();
     _portController.dispose();
@@ -104,10 +111,14 @@ class _JoinLobbyPageState extends State<JoinLobbyPage> {
       await _lan.send(
         LanMessage('join_hello', {'playerId': _myId, 'playerName': myName}),
       );
+      _heartbeatTimer?.cancel();
+      _heartbeatTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+        _lan.send(LanMessage('heartbeat', {'playerId': _myId}));
+      });
       if (!mounted) return;
       setState(() {
         _joined = true;
-        _status = 'Подключено. Ожидание START GAME от хоста';
+        _status = tr(context, 'waiting_host');
       });
     } catch (_) {
       setState(() => _status = 'Не удалось подключиться');
@@ -117,21 +128,21 @@ class _JoinLobbyPageState extends State<JoinLobbyPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Лобби подключения')),
+      appBar: AppBar(title: Text(tr(context, 'join_lobby'))),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
             TextField(
               controller: _nameController,
-              decoration: const InputDecoration(labelText: 'Ваше имя'),
+              decoration: InputDecoration(labelText: tr(context, 'your_name')),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: _hostController,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'IP хоста',
+              decoration: InputDecoration(
+                labelText: tr(context, 'host_ip'),
                 hintText: '192.168.10.183',
               ),
             ),
@@ -139,7 +150,7 @@ class _JoinLobbyPageState extends State<JoinLobbyPage> {
             TextField(
               controller: _portController,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Порт'),
+              decoration: InputDecoration(labelText: tr(context, 'port')),
             ),
             const SizedBox(height: 12),
             Align(alignment: Alignment.centerLeft, child: Text(_status)),
@@ -148,7 +159,7 @@ class _JoinLobbyPageState extends State<JoinLobbyPage> {
               width: double.infinity,
               child: FilledButton(
                 onPressed: _joined ? null : _joinGame,
-                child: const Text('ПОДКЛЮЧИТЬСЯ К ИГРЕ'),
+                child: Text(tr(context, 'connect_game')),
               ),
             ),
           ],

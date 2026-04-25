@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:pocker_in_phone/core/i18n.dart';
 import 'package:pocker_in_phone/network/lan_peer.dart';
 import 'package:pocker_in_phone/ui/game_room_page.dart';
 
@@ -17,8 +19,10 @@ class _HostLobbyPageState extends State<HostLobbyPage> {
   final _portController = TextEditingController(text: '5055');
   final _myNameController = TextEditingController(text: 'Хост');
   final _connectedPlayers = <String, String>{};
+  final _lastHeartbeat = <String, DateTime>{};
   final _myId =
       'host-${DateTime.now().millisecondsSinceEpoch}-${Random().nextInt(9999)}';
+  Timer? _presenceTimer;
   String _hostAddress = '0.0.0.0:5055';
   int _startingCredits = 1000;
   bool _hosting = false;
@@ -27,17 +31,34 @@ class _HostLobbyPageState extends State<HostLobbyPage> {
   void initState() {
     super.initState();
     _lan.messages.listen((message) {
-      if (message.type != 'join_hello' || !mounted) return;
-      final playerId = message.payload['playerId'] as String;
-      final playerName = message.payload['playerName'] as String;
-      setState(() {
-        _connectedPlayers[playerId] = playerName;
-      });
+      if (!mounted) return;
+      if (message.type == 'join_hello') {
+        final playerId = message.payload['playerId'] as String;
+        final playerName = message.payload['playerName'] as String;
+        setState(() {
+          if (_connectedPlayers.length < 9) {
+            _connectedPlayers[playerId] = playerName;
+            _lastHeartbeat[playerId] = DateTime.now();
+          }
+        });
+      } else if (message.type == 'heartbeat') {
+        final playerId = message.payload['playerId'] as String;
+        if (_connectedPlayers.containsKey(playerId)) {
+          _lastHeartbeat[playerId] = DateTime.now();
+        }
+      } else if (message.type == 'leave') {
+        final playerId = message.payload['playerId'] as String;
+        setState(() {
+          _connectedPlayers.remove(playerId);
+          _lastHeartbeat.remove(playerId);
+        });
+      }
     });
   }
 
   @override
   void dispose() {
+    _presenceTimer?.cancel();
     _portController.dispose();
     _myNameController.dispose();
     _lan.dispose();
@@ -52,6 +73,22 @@ class _HostLobbyPageState extends State<HostLobbyPage> {
     setState(() {
       _hosting = true;
       _hostAddress = '$ip:$port';
+    });
+    _presenceTimer?.cancel();
+    _presenceTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!_hosting || !mounted) return;
+      final now = DateTime.now();
+      final stale = _lastHeartbeat.entries
+          .where((entry) => now.difference(entry.value).inSeconds > 3)
+          .map((entry) => entry.key)
+          .toList();
+      if (stale.isEmpty) return;
+      setState(() {
+        for (final id in stale) {
+          _connectedPlayers.remove(id);
+          _lastHeartbeat.remove(id);
+        }
+      });
     });
   }
 
@@ -76,6 +113,12 @@ class _HostLobbyPageState extends State<HostLobbyPage> {
         : _myNameController.text.trim();
     final playerNames = <String, String>{_myId: myName, ..._connectedPlayers};
     final playerIds = playerNames.keys.toList();
+    if (playerIds.length < 2 || playerIds.length > 10) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Для старта нужно от 2 до 10 игроков')),
+      );
+      return;
+    }
     _lan.send(
       LanMessage('game_start', {
         'startingCredits': _startingCredits,
@@ -101,7 +144,7 @@ class _HostLobbyPageState extends State<HostLobbyPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Лобби хоста')),
+      appBar: AppBar(title: Text(tr(context, 'host_lobby'))),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -109,7 +152,7 @@ class _HostLobbyPageState extends State<HostLobbyPage> {
           children: [
             TextField(
               controller: _myNameController,
-              decoration: const InputDecoration(labelText: 'Ваше имя'),
+              decoration: InputDecoration(labelText: tr(context, 'your_name')),
             ),
             const SizedBox(height: 10),
             Row(
@@ -118,21 +161,21 @@ class _HostLobbyPageState extends State<HostLobbyPage> {
                   child: TextField(
                     controller: _portController,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Порт'),
+                    decoration: InputDecoration(labelText: tr(context, 'port')),
                   ),
                 ),
                 const SizedBox(width: 10),
                 FilledButton(
                   onPressed: _hosting ? null : _startHosting,
-                  child: const Text('Запустить стол'),
+                  child: Text(tr(context, 'start_table')),
                 ),
               ],
             ),
             const SizedBox(height: 16),
-            Text('Адрес для подключения: $_hostAddress'),
+            Text('${tr(context, 'join_address')}: $_hostAddress'),
             const SizedBox(height: 16),
             Text(
-              'Стартовые кредиты: $_startingCredits AidCoin',
+              '${tr(context, 'starting_credits')}: $_startingCredits AidCoin',
               style: Theme.of(context).textTheme.titleMedium,
             ),
             Slider(
@@ -145,7 +188,7 @@ class _HostLobbyPageState extends State<HostLobbyPage> {
             ),
             const SizedBox(height: 10),
             Text(
-              'Подключившиеся игроки (${_connectedPlayers.length}):',
+              '${tr(context, 'connected_players')} (${_connectedPlayers.length}/9):',
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
@@ -162,6 +205,16 @@ class _HostLobbyPageState extends State<HostLobbyPage> {
                           leading: const Icon(Icons.devices),
                           title: Text(entry.value),
                           subtitle: Text(entry.key),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.person_remove),
+                            tooltip: 'Удалить игрока',
+                            onPressed: () {
+                              setState(() {
+                                _connectedPlayers.remove(entry.key);
+                                _lastHeartbeat.remove(entry.key);
+                              });
+                            },
+                          ),
                         );
                       },
                     ),
@@ -169,8 +222,13 @@ class _HostLobbyPageState extends State<HostLobbyPage> {
             SizedBox(
               width: double.infinity,
               child: FilledButton(
-                onPressed: _hosting ? _openGame : null,
-                child: const Text('НАЧАТЬ ИГРУ'),
+                onPressed:
+                    (_hosting &&
+                        (_connectedPlayers.length + 1) >= 2 &&
+                        (_connectedPlayers.length + 1) <= 10)
+                    ? _openGame
+                    : null,
+                child: Text(tr(context, 'start_game')),
               ),
             ),
           ],

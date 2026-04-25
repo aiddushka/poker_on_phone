@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:pocker_in_phone/core/i18n.dart';
 import 'package:pocker_in_phone/ui/host_lobby_page.dart';
 import 'package:pocker_in_phone/ui/join_lobby_page.dart';
+import 'package:pocker_in_phone/ui/settings_page.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -8,7 +10,7 @@ class HomePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Покер по LAN')),
+      appBar: AppBar(title: Text(tr(context, 'app_title'))),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -24,7 +26,7 @@ class HomePage extends StatelessWidget {
                     );
                   },
                   icon: const Icon(Icons.wifi_tethering),
-                  label: const Text('Создать стол'),
+                  label: Text(tr(context, 'create_table')),
                 ),
               ),
               const SizedBox(height: 16),
@@ -37,7 +39,20 @@ class HomePage extends StatelessWidget {
                     );
                   },
                   icon: const Icon(Icons.link),
-                  label: const Text('Подключиться'),
+                  label: Text(tr(context, 'join_table')),
+                ),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: 260,
+                child: FilledButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const SettingsPage()),
+                    );
+                  },
+                  icon: const Icon(Icons.settings),
+                  label: Text(tr(context, 'settings')),
                 ),
               ),
             ],

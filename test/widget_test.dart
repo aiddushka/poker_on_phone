@@ -6,6 +6,7 @@
 // tree, read text, and verify that the values of widget properties are correct.
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pocker_in_phone/core/app_settings.dart';
 
 import 'package:pocker_in_phone/main.dart';
 
@@ -13,7 +14,9 @@ void main() {
   testWidgets('Home screen has host and join actions', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const MentalPokerApp());
+    await tester.pumpWidget(
+      MentalPokerApp(settings: AppSettings(AppLanguage.ru)),
+    );
     expect(find.text('Создать стол'), findsOneWidget);
     expect(find.text('Подключиться'), findsOneWidget);
   });
