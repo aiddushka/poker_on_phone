@@ -129,7 +129,7 @@ flutter build apk --release
 Файл:
 `build/app/outputs/flutter-apk/app-release.apk`
 
-## Сборка iOS
+## Сборка iOS 
 
 Только на macOS:
 
