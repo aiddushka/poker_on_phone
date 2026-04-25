@@ -132,6 +132,9 @@ class _GameRoomPageState extends State<GameRoomPage> {
         setState(() {
           _showTournamentLobby =
               message.payload['showTournamentLobby'] as bool? ?? false;
+          _canOpenNewGameOverlay =
+              message.payload['canOpenNewGameOverlay'] as bool? ??
+              _canOpenNewGameOverlay;
           _players = playersRaw
               .map(
                 (p) => GamePlayer(
@@ -275,6 +278,7 @@ class _GameRoomPageState extends State<GameRoomPage> {
       'communityCards': _allCommunityCardIds,
       'streetCommittedByPlayer': _streetCommittedByPlayer,
       'showTournamentLobby': _showTournamentLobby,
+      'canOpenNewGameOverlay': _canOpenNewGameOverlay,
     };
     _handleNetworkMessage(LanMessage('game_state', payload));
     await widget.lan.send(LanMessage('game_state', payload));
@@ -440,8 +444,25 @@ class _GameRoomPageState extends State<GameRoomPage> {
 
   void _awardSingleWinner(String winnerId) {
     final winner = _players.firstWhere((p) => p.id == winnerId);
-    _winnerBanner = 'Победитель: ${winner.name}, банк $_pot';
+    final combo = _winnerComboOrNoShowdown(winnerId);
+    _winnerBanner = 'Победитель: ${winner.name} ($combo), банк $_pot';
     _awardWinnerCredits(winnerId);
+  }
+
+  String _winnerComboOrNoShowdown(String winnerId) {
+    final visibleCommunity = _allCommunityCardIds
+        .take(_visibleCommunityCountForStreet(_streetIndex))
+        .toList();
+    final hole = _holeCardIdsByPlayer[winnerId] ?? const <int>[];
+    final all = [...hole, ...visibleCommunity];
+    if (all.length < 5) {
+      return 'без вскрытия';
+    }
+    final cards = all.map(_cardFromId).toList();
+    if (cards.length == 5) {
+      return _evaluator.evaluate5(cards).title;
+    }
+    return _evaluator.evaluateBestOfSeven(cards).title;
   }
 
   void _awardWinnerCredits(String winnerId) {
@@ -603,6 +624,15 @@ class _GameRoomPageState extends State<GameRoomPage> {
   void _closeTournamentOverlay() {
     setState(() {
       _showTournamentLobby = false;
+    });
+    if (widget.isHost) {
+      _broadcastGameState();
+    }
+  }
+
+  void _reopenTournamentOverlay() {
+    setState(() {
+      _showTournamentLobby = true;
     });
     if (widget.isHost) {
       _broadcastGameState();
@@ -999,83 +1029,95 @@ class _GameRoomPageState extends State<GameRoomPage> {
                       child: Card(
                         child: Padding(
                           padding: const EdgeInsets.all(16),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Align(
-                                alignment: Alignment.topRight,
-                                child: IconButton(
-                                  onPressed: _closeTournamentOverlay,
-                                  icon: const Icon(Icons.close),
-                                  tooltip: 'Закрыть',
-                                ),
-                              ),
-                              Text(
-                                _winnerBanner ??
-                                    (widget.isHost
-                                        ? 'Окно новой игры'
-                                        : 'Ожидание новой игры'),
-                                style: Theme.of(context).textTheme.titleLarge,
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                widget.isHost
-                                    ? 'Настройте параметры и начните новую игру'
-                                    : 'Ожидание новой игры',
-                              ),
-                              const SizedBox(height: 12),
-                              if (widget.isHost) ...[
-                                TextField(
-                                  controller: _nextCreditsController,
-                                  keyboardType: TextInputType.number,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Кредиты на новую игру',
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxHeight:
+                                  MediaQuery.of(context).size.height * 0.8,
+                            ),
+                            child: SingleChildScrollView(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Align(
+                                    alignment: Alignment.topRight,
+                                    child: IconButton(
+                                      onPressed: _closeTournamentOverlay,
+                                      icon: const Icon(Icons.close),
+                                      tooltip: 'Закрыть',
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(height: 10),
-                                const Text('Управление пользователями:'),
-                                const SizedBox(height: 6),
-                                SizedBox(
-                                  height: 120,
-                                  child: ListView(
-                                    children: _players
-                                        .map(
-                                          (p) => ListTile(
-                                            dense: true,
-                                            title: Text(p.name),
-                                            subtitle: Text(
-                                              'Кредиты: ${p.credits}',
-                                            ),
-                                            trailing: p.id == widget.meId
-                                                ? const Icon(Icons.shield)
-                                                : IconButton(
-                                                    icon: const Icon(
-                                                      Icons.person_remove,
-                                                    ),
-                                                    tooltip:
-                                                        'Удалить из следующей игры',
-                                                    onPressed: () =>
-                                                        _removePlayerFromNextGame(
-                                                          p.id,
+                                  Text(
+                                    _winnerBanner ??
+                                        (widget.isHost
+                                            ? 'Окно новой игры'
+                                            : 'Ожидание новой игры'),
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.titleLarge,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    widget.isHost
+                                        ? 'Настройте параметры и начните новую игру'
+                                        : 'Ожидание новой игры',
+                                  ),
+                                  const SizedBox(height: 12),
+                                  if (widget.isHost) ...[
+                                    TextField(
+                                      controller: _nextCreditsController,
+                                      keyboardType: TextInputType.number,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Кредиты на новую игру',
+                                      ),
+                                    ),
+                                    const SizedBox(height: 10),
+                                    const Text('Управление пользователями:'),
+                                    const SizedBox(height: 6),
+                                    SizedBox(
+                                      height: 120,
+                                      child: ListView(
+                                        children: _players
+                                            .map(
+                                              (p) => ListTile(
+                                                dense: true,
+                                                title: Text(p.name),
+                                                subtitle: Text(
+                                                  'Кредиты: ${p.credits}',
+                                                ),
+                                                trailing: p.id == widget.meId
+                                                    ? const Icon(Icons.shield)
+                                                    : IconButton(
+                                                        icon: const Icon(
+                                                          Icons.person_remove,
                                                         ),
-                                                  ),
-                                          ),
-                                        )
-                                        .toList(),
-                                  ),
-                                ),
-                                const SizedBox(height: 10),
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: FilledButton(
-                                    onPressed: _startNextTournamentFromHost,
-                                    child: const Text('НАЧАТЬ НОВУЮ ИГРУ'),
-                                  ),
-                                ),
-                              ] else
-                                const Text('Ожидание хоста / Приготовьтесь'),
-                            ],
+                                                        tooltip:
+                                                            'Удалить из следующей игры',
+                                                        onPressed: () =>
+                                                            _removePlayerFromNextGame(
+                                                              p.id,
+                                                            ),
+                                                      ),
+                                              ),
+                                            )
+                                            .toList(),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 10),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: FilledButton(
+                                        onPressed: _startNextTournamentFromHost,
+                                        child: const Text('НАЧАТЬ НОВУЮ ИГРУ'),
+                                      ),
+                                    ),
+                                  ] else
+                                    const Text(
+                                      'Ожидание хоста / Приготовьтесь',
+                                    ),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
                       ),
@@ -1083,20 +1125,17 @@ class _GameRoomPageState extends State<GameRoomPage> {
                   ),
                 ),
               ),
-            if (widget.isHost &&
-                _canOpenNewGameOverlay &&
-                !_showTournamentLobby)
+            if (_canOpenNewGameOverlay && !_showTournamentLobby)
               Positioned(
                 right: 16,
                 top: 16,
                 child: FilledButton(
-                  onPressed: () {
-                    setState(() {
-                      _showTournamentLobby = true;
-                    });
-                    _broadcastGameState();
-                  },
-                  child: const Text('НАЧАТЬ НОВУЮ ИГРУ'),
+                  onPressed: _reopenTournamentOverlay,
+                  child: Text(
+                    widget.isHost
+                        ? 'НАЧАТЬ НОВУЮ ИГРУ'
+                        : 'ОТКРЫТЬ ОКНО РЕЗУЛЬТАТА',
+                  ),
                 ),
               ),
           ],
