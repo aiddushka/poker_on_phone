@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:pocker_in_phone/core/i18n.dart';
 import 'package:pocker_in_phone/game/poker_hand.dart';
 import 'package:pocker_in_phone/game/playing_card.dart';
 import 'package:pocker_in_phone/network/lan_peer.dart';
@@ -487,7 +488,7 @@ class _GameRoomPageState extends State<GameRoomPage> {
           'Игра завершена. Победитель: ${alive.isEmpty ? '-' : alive.first.name}';
       _winnerBanner = _status;
     } else {
-      _status = 'Раунд завершен. Ожидание хоста / Приготовьтесь';
+      _status = tr(context, 'guest_waiting_hint');
       _winnerBanner = _winnerBanner ?? _status;
     }
     _broadcastGameState();
@@ -546,14 +547,14 @@ class _GameRoomPageState extends State<GameRoomPage> {
         }
 
         return AlertDialog(
-          title: const Text('Помощь'),
+          title: Text(tr(context, 'help_title')),
           content: SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
-                  'Комбинации:',
+                Text(
+                  '${tr(context, 'combinations')}:',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 10),
@@ -568,8 +569,8 @@ class _GameRoomPageState extends State<GameRoomPage> {
                 combo('Пара', 'J♣ J♦ 4♠ 8♥ K♣'),
                 combo('Старшая карта', 'A♣ 10♦ 8♠ 6♥ 3♣'),
                 const SizedBox(height: 12),
-                const Text(
-                  'Описание игры',
+                Text(
+                  tr(context, 'game_description'),
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 6),
@@ -584,7 +585,7 @@ class _GameRoomPageState extends State<GameRoomPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Закрыть'),
+              child: Text(tr(context, 'close')),
             ),
           ],
         );
@@ -819,9 +820,9 @@ class _GameRoomPageState extends State<GameRoomPage> {
                       Positioned(
                         left: tableCenter.dx - 42,
                         top: tableCenter.dy - radiusY - 84,
-                        child: const Chip(
-                          avatar: Icon(Icons.casino, size: 18),
-                          label: Text('Дилер'),
+                        child: Chip(
+                          avatar: const Icon(Icons.casino, size: 18),
+                          label: Text(tr(context, 'dealer')),
                         ),
                       ),
                       ..._seatOrderIds.asMap().entries.map((e) {
@@ -846,7 +847,9 @@ class _GameRoomPageState extends State<GameRoomPage> {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text('Этап: ${_streetLabel(_streetIndex)}'),
+                            Text(
+                              '${tr(context, 'stage')}: ${_streetLabel(_streetIndex)}',
+                            ),
                             const SizedBox(height: 8),
                             Wrap(
                               spacing: 6,
@@ -869,10 +872,10 @@ class _GameRoomPageState extends State<GameRoomPage> {
                     child: Column(
                       children: [
                         Text(
-                          'Банк: $_pot',
+                          '${tr(context, 'pot')}: $_pot',
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
-                        Text('Текущая ставка: $_currentBet'),
+                        Text('${tr(context, 'current_bet')}: $_currentBet'),
                         Text(
                           _winnerBanner ?? _status,
                           textAlign: TextAlign.center,
@@ -928,7 +931,7 @@ class _GameRoomPageState extends State<GameRoomPage> {
                                       onPressed: canAct
                                           ? () => _sendAction('fold')
                                           : null,
-                                      child: const Text('Сбросить'),
+                                      child: Text(tr(context, 'fold')),
                                     ),
                                   ),
                                   SizedBox(
@@ -937,7 +940,7 @@ class _GameRoomPageState extends State<GameRoomPage> {
                                       onPressed: canCheck
                                           ? () => _sendAction('check')
                                           : null,
-                                      child: const Text('Просматреть'),
+                                      child: Text(tr(context, 'check_view')),
                                     ),
                                   ),
                                   SizedBox(
@@ -946,7 +949,7 @@ class _GameRoomPageState extends State<GameRoomPage> {
                                       onPressed: canCall
                                           ? () => _sendAction('call')
                                           : null,
-                                      child: const Text('Принять'),
+                                      child: Text(tr(context, 'accept')),
                                     ),
                                   ),
                                   SizedBox(
@@ -966,9 +969,12 @@ class _GameRoomPageState extends State<GameRoomPage> {
                                                 ScaffoldMessenger.of(
                                                   context,
                                                 ).showSnackBar(
-                                                  const SnackBar(
+                                                  SnackBar(
                                                     content: Text(
-                                                      'Для повышения введите сумму больше текущей ставки и не выше доступного лимита',
+                                                      tr(
+                                                        context,
+                                                        'raise_validation',
+                                                      ),
                                                     ),
                                                   ),
                                                 );
@@ -980,14 +986,14 @@ class _GameRoomPageState extends State<GameRoomPage> {
                                               );
                                             }
                                           : null,
-                                      child: const Text('Повысить'),
+                                      child: Text(tr(context, 'raise')),
                                     ),
                                   ),
                                   const SizedBox(height: 6),
                                   Text(
                                     canAct
-                                        ? 'Ваш ход'
-                                        : 'Ожидание: ${_seatOrderIds.isEmpty ? '-' : _playerNameBySeat(_turnSeatIndex)}',
+                                        ? tr(context, 'your_turn')
+                                        : '${tr(context, 'waiting')}: ${_seatOrderIds.isEmpty ? '-' : _playerNameBySeat(_turnSeatIndex)}',
                                     textAlign: TextAlign.center,
                                   ),
                                   const SizedBox(height: 8),
@@ -996,14 +1002,14 @@ class _GameRoomPageState extends State<GameRoomPage> {
                                     child: FilledButton.tonalIcon(
                                       onPressed: _showHelpDialog,
                                       icon: const Icon(Icons.help_outline),
-                                      label: const Text('Помощь'),
+                                      label: Text(tr(context, 'help')),
                                     ),
                                   ),
                                   if (canAct && !canRaise && canCall)
-                                    const Text(
-                                      'Недостаточно кредитов для повышения: доступны Колл/Сбросить',
+                                    Text(
+                                      tr(context, 'insufficient_raise'),
                                       textAlign: TextAlign.center,
-                                      style: TextStyle(
+                                      style: const TextStyle(
                                         fontSize: 12,
                                         color: Colors.orangeAccent,
                                       ),
@@ -1050,8 +1056,8 @@ class _GameRoomPageState extends State<GameRoomPage> {
                                   Text(
                                     _winnerBanner ??
                                         (widget.isHost
-                                            ? 'Окно новой игры'
-                                            : 'Ожидание новой игры'),
+                                            ? tr(context, 'waiting_new_game')
+                                            : tr(context, 'waiting_new_game')),
                                     style: Theme.of(
                                       context,
                                     ).textTheme.titleLarge,
@@ -1059,20 +1065,23 @@ class _GameRoomPageState extends State<GameRoomPage> {
                                   const SizedBox(height: 8),
                                   Text(
                                     widget.isHost
-                                        ? 'Настройте параметры и начните новую игру'
-                                        : 'Ожидание новой игры',
+                                        ? tr(context, 'host_waiting_hint')
+                                        : tr(context, 'waiting_new_game'),
                                   ),
                                   const SizedBox(height: 12),
                                   if (widget.isHost) ...[
                                     TextField(
                                       controller: _nextCreditsController,
                                       keyboardType: TextInputType.number,
-                                      decoration: const InputDecoration(
-                                        labelText: 'Кредиты на новую игру',
+                                      decoration: InputDecoration(
+                                        labelText: tr(
+                                          context,
+                                          'new_game_credits',
+                                        ),
                                       ),
                                     ),
                                     const SizedBox(height: 10),
-                                    const Text('Управление пользователями:'),
+                                    Text('${tr(context, 'user_management')}:'),
                                     const SizedBox(height: 6),
                                     SizedBox(
                                       height: 120,
@@ -1083,7 +1092,7 @@ class _GameRoomPageState extends State<GameRoomPage> {
                                                 dense: true,
                                                 title: Text(p.name),
                                                 subtitle: Text(
-                                                  'Кредиты: ${p.credits}',
+                                                  '${tr(context, 'credits')}: ${p.credits}',
                                                 ),
                                                 trailing: p.id == widget.meId
                                                     ? const Icon(Icons.shield)
@@ -1108,13 +1117,13 @@ class _GameRoomPageState extends State<GameRoomPage> {
                                       width: double.infinity,
                                       child: FilledButton(
                                         onPressed: _startNextTournamentFromHost,
-                                        child: const Text('НАЧАТЬ НОВУЮ ИГРУ'),
+                                        child: Text(
+                                          tr(context, 'start_new_game'),
+                                        ),
                                       ),
                                     ),
                                   ] else
-                                    const Text(
-                                      'Ожидание хоста / Приготовьтесь',
-                                    ),
+                                    Text(tr(context, 'guest_waiting_hint')),
                                 ],
                               ),
                             ),
@@ -1133,8 +1142,8 @@ class _GameRoomPageState extends State<GameRoomPage> {
                   onPressed: _reopenTournamentOverlay,
                   child: Text(
                     widget.isHost
-                        ? 'НАЧАТЬ НОВУЮ ИГРУ'
-                        : 'ОТКРЫТЬ ОКНО РЕЗУЛЬТАТА',
+                        ? tr(context, 'start_new_game')
+                        : tr(context, 'open_result_window'),
                   ),
                 ),
               ),
