@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:pocker_in_phone/network/lan_peer.dart';
@@ -14,8 +15,10 @@ class HostLobbyPage extends StatefulWidget {
 class _HostLobbyPageState extends State<HostLobbyPage> {
   final _lan = LanPeerService();
   final _portController = TextEditingController(text: '5055');
-  final _myNameController = TextEditingController(text: 'Host');
-  final _connectedPlayers = <String>[];
+  final _myNameController = TextEditingController(text: 'Хост');
+  final _connectedPlayers = <String, String>{};
+  final _myId =
+      'host-${DateTime.now().millisecondsSinceEpoch}-${Random().nextInt(9999)}';
   String _hostAddress = '0.0.0.0:5055';
   int _startingCredits = 1000;
   bool _hosting = false;
@@ -23,12 +26,12 @@ class _HostLobbyPageState extends State<HostLobbyPage> {
   @override
   void initState() {
     super.initState();
-    _lan.peerConnected.listen((peer) {
-      if (!mounted) return;
+    _lan.messages.listen((message) {
+      if (message.type != 'join_hello' || !mounted) return;
+      final playerId = message.payload['playerId'] as String;
+      final playerName = message.payload['playerName'] as String;
       setState(() {
-        if (!_connectedPlayers.contains(peer)) {
-          _connectedPlayers.add(peer);
-        }
+        _connectedPlayers[playerId] = playerName;
       });
     });
   }
@@ -69,15 +72,27 @@ class _HostLobbyPageState extends State<HostLobbyPage> {
 
   void _openGame() {
     final myName = _myNameController.text.trim().isEmpty
-        ? 'Host'
+        ? 'Хост'
         : _myNameController.text.trim();
-    final players = [myName, ..._connectedPlayers.map((e) => 'Player $e')];
+    final playerNames = <String, String>{_myId: myName, ..._connectedPlayers};
+    final playerIds = playerNames.keys.toList();
+    _lan.send(
+      LanMessage('game_start', {
+        'startingCredits': _startingCredits,
+        'playerIds': playerIds,
+        'playerNames': playerNames,
+      }),
+    );
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => GameRoomPage(
-          playerNames: players,
+          lan: _lan,
+          isHost: true,
+          meId: _myId,
           startingCredits: _startingCredits,
           meName: myName,
+          initialPlayerIds: playerIds,
+          initialPlayerNames: playerNames,
         ),
       ),
     );
@@ -86,7 +101,7 @@ class _HostLobbyPageState extends State<HostLobbyPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Host LAN Lobby')),
+      appBar: AppBar(title: const Text('Лобби хоста')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -94,7 +109,7 @@ class _HostLobbyPageState extends State<HostLobbyPage> {
           children: [
             TextField(
               controller: _myNameController,
-              decoration: const InputDecoration(labelText: 'Your Name'),
+              decoration: const InputDecoration(labelText: 'Ваше имя'),
             ),
             const SizedBox(height: 10),
             Row(
@@ -103,21 +118,21 @@ class _HostLobbyPageState extends State<HostLobbyPage> {
                   child: TextField(
                     controller: _portController,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Port'),
+                    decoration: const InputDecoration(labelText: 'Порт'),
                   ),
                 ),
                 const SizedBox(width: 10),
                 FilledButton(
                   onPressed: _hosting ? null : _startHosting,
-                  child: const Text('Host LAN'),
+                  child: const Text('Запустить стол'),
                 ),
               ],
             ),
             const SizedBox(height: 16),
-            Text('IP and port for Join: $_hostAddress'),
+            Text('Адрес для подключения: $_hostAddress'),
             const SizedBox(height: 16),
             Text(
-              'Starting credits: $_startingCredits AidCoin',
+              'Стартовые кредиты: $_startingCredits AidCoin',
               style: Theme.of(context).textTheme.titleMedium,
             ),
             Slider(
@@ -130,19 +145,23 @@ class _HostLobbyPageState extends State<HostLobbyPage> {
             ),
             const SizedBox(height: 10),
             Text(
-              'Connected devices (${_connectedPlayers.length}):',
+              'Подключившиеся игроки (${_connectedPlayers.length}):',
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
             Expanded(
-              child: _connectedPlayers.isEmpty
-                  ? const Center(child: Text('No players joined yet'))
+              child: _connectedPlayers.values.isEmpty
+                  ? const Center(child: Text('Пока никто не подключился'))
                   : ListView.builder(
                       itemCount: _connectedPlayers.length,
                       itemBuilder: (context, index) {
+                        final entry = _connectedPlayers.entries.elementAt(
+                          index,
+                        );
                         return ListTile(
                           leading: const Icon(Icons.devices),
-                          title: Text(_connectedPlayers[index]),
+                          title: Text(entry.value),
+                          subtitle: Text(entry.key),
                         );
                       },
                     ),
@@ -151,7 +170,7 @@ class _HostLobbyPageState extends State<HostLobbyPage> {
               width: double.infinity,
               child: FilledButton(
                 onPressed: _hosting ? _openGame : null,
-                child: const Text('START GAME'),
+                child: const Text('НАЧАТЬ ИГРУ'),
               ),
             ),
           ],

@@ -8,7 +8,7 @@ class HomePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Mental Poker LAN')),
+      appBar: AppBar(title: const Text('Покер по LAN')),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -24,7 +24,7 @@ class HomePage extends StatelessWidget {
                     );
                   },
                   icon: const Icon(Icons.wifi_tethering),
-                  label: const Text('Host LAN'),
+                  label: const Text('Создать стол'),
                 ),
               ),
               const SizedBox(height: 16),
@@ -37,7 +37,7 @@ class HomePage extends StatelessWidget {
                     );
                   },
                   icon: const Icon(Icons.link),
-                  label: const Text('Join LAN'),
+                  label: const Text('Подключиться'),
                 ),
               ),
             ],

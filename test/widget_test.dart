@@ -14,7 +14,7 @@ void main() {
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(const MentalPokerApp());
-    expect(find.text('Host LAN'), findsOneWidget);
-    expect(find.text('Join LAN'), findsOneWidget);
+    expect(find.text('Создать стол'), findsOneWidget);
+    expect(find.text('Подключиться'), findsOneWidget);
   });
 }
