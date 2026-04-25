@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -23,6 +24,8 @@ class _PokerTablePageState extends State<PokerTablePage> {
   PokerHandResult? _result;
   String _status = 'Ready';
   bool _isHosting = false;
+  final _hostController = TextEditingController(text: '192.168.10.183');
+  final _portController = TextEditingController(text: '5055');
 
   @override
   void initState() {
@@ -36,16 +39,22 @@ class _PokerTablePageState extends State<PokerTablePage> {
 
   @override
   void dispose() {
+    _hostController.dispose();
+    _portController.dispose();
     _lan.dispose();
     super.dispose();
   }
 
   Future<void> _host() async {
     try {
-      await _lan.host(port: 5055);
+      final port = int.tryParse(_portController.text.trim()) ?? 5055;
+      await _lan.host(port: port);
+      final hostIp = await _detectLocalIpv4();
       setState(() {
         _isHosting = true;
-        _status = 'Hosting on port 5055';
+        _hostController.text = hostIp;
+        _portController.text = port.toString();
+        _status = 'Host: $hostIp:$port';
       });
     } catch (_) {
       setState(() => _status = 'Hosting failed');
@@ -54,11 +63,36 @@ class _PokerTablePageState extends State<PokerTablePage> {
 
   Future<void> _join() async {
     try {
-      await _lan.join(host: '192.168.0.100', port: 5055);
-      setState(() => _status = 'Connected to host');
+      final host = _hostController.text.trim();
+      final port = int.tryParse(_portController.text.trim());
+      if (host.isEmpty || port == null) {
+        setState(() => _status = 'Enter host IP and valid port');
+        return;
+      }
+      await _lan.join(host: host, port: port);
+      setState(() => _status = 'Connected to $host:$port');
     } catch (_) {
       setState(() => _status = 'Connection failed');
     }
+  }
+
+  Future<String> _detectLocalIpv4() async {
+    try {
+      final interfaces = await NetworkInterface.list(
+        includeLoopback: false,
+        type: InternetAddressType.IPv4,
+      );
+      for (final interface in interfaces) {
+        for (final address in interface.addresses) {
+          if (!address.isLoopback) {
+            return address.address;
+          }
+        }
+      }
+    } catch (_) {
+      // Fall back to placeholder if detection fails.
+    }
+    return '0.0.0.0';
   }
 
   Future<void> _dealMentalPokerRound() async {
@@ -104,6 +138,36 @@ class _PokerTablePageState extends State<PokerTablePage> {
         children: [
           const SizedBox(height: 16),
           Text(_status, style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: TextField(
+                    controller: _hostController,
+                    decoration: const InputDecoration(
+                      labelText: 'Host IP',
+                      hintText: '192.168.10.183',
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    controller: _portController,
+                    decoration: const InputDecoration(
+                      labelText: 'Port',
+                      hintText: '5055',
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: 16),
           Wrap(
             spacing: 10,

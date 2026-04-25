@@ -60,9 +60,9 @@ class LanPeerService {
         .transform(utf8.decoder)
         .transform(const LineSplitter())
         .listen((line) {
-      final data = jsonDecode(line) as Map<String, dynamic>;
-      _messageController.add(LanMessage.fromJson(data));
-    });
+          final data = jsonDecode(line) as Map<String, dynamic>;
+          _messageController.add(LanMessage.fromJson(data));
+        });
   }
 
   Future<void> dispose() async {
