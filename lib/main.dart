@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:pocker_in_phone/ui/poker_table_page.dart';
+import 'package:pocker_in_phone/ui/home_page.dart';
 
 void main() {
   runApp(const MentalPokerApp());
@@ -21,7 +21,7 @@ class MentalPokerApp extends StatelessWidget {
         scaffoldBackgroundColor: const Color(0xFF0A1A12),
         useMaterial3: true,
       ),
-      home: const PokerTablePage(),
+      home: const HomePage(),
     );
   }
 }

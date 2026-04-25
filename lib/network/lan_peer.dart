@@ -22,14 +22,19 @@ class LanPeerService {
   ServerSocket? _server;
   Socket? _client;
   final _messageController = StreamController<LanMessage>.broadcast();
+  final _peerConnectedController = StreamController<String>.broadcast();
   final _connections = <Socket>{};
 
   Stream<LanMessage> get messages => _messageController.stream;
+  Stream<String> get peerConnected => _peerConnectedController.stream;
 
   Future<void> host({required int port}) async {
     _server = await ServerSocket.bind(InternetAddress.anyIPv4, port);
     _server!.listen((socket) {
       _connections.add(socket);
+      _peerConnectedController.add(
+        '${socket.remoteAddress.address}:${socket.remotePort}',
+      );
       _listenSocket(socket);
     });
   }
@@ -72,6 +77,7 @@ class LanPeerService {
     _connections.clear();
     await _client?.close();
     await _server?.close();
+    await _peerConnectedController.close();
     await _messageController.close();
   }
 }

@@ -10,9 +10,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pocker_in_phone/main.dart';
 
 void main() {
-  testWidgets('Mental poker table is rendered', (WidgetTester tester) async {
+  testWidgets('Home screen has host and join actions', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(const MentalPokerApp());
-    expect(find.text('Mental Poker LAN (SRA)'), findsOneWidget);
-    expect(find.text('Deal Round'), findsOneWidget);
+    expect(find.text('Host LAN'), findsOneWidget);
+    expect(find.text('Join LAN'), findsOneWidget);
   });
 }
