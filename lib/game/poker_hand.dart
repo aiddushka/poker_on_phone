@@ -77,6 +77,35 @@ class PokerHandEvaluator {
     return const PokerHandResult(PokerHandCategory.highCard, 'High Card');
   }
 
+  PokerHandResult evaluateBestOfSeven(List<PlayingCard> cards) {
+    if (cards.length < 5) {
+      throw ArgumentError('At least 5 cards are required.');
+    }
+    PokerHandResult? best;
+    for (var i = 0; i < cards.length - 4; i++) {
+      for (var j = i + 1; j < cards.length - 3; j++) {
+        for (var k = j + 1; k < cards.length - 2; k++) {
+          for (var l = k + 1; l < cards.length - 1; l++) {
+            for (var m = l + 1; m < cards.length; m++) {
+              final current = evaluate5([
+                cards[i],
+                cards[j],
+                cards[k],
+                cards[l],
+                cards[m],
+              ]);
+              if (best == null ||
+                  current.category.index > best.category.index) {
+                best = current;
+              }
+            }
+          }
+        }
+      }
+    }
+    return best!;
+  }
+
   bool _isStraight(List<int> sortedRanks) {
     final isWheel = sortedRanks.join(',') == '2,3,4,5,14';
     if (isWheel) {
